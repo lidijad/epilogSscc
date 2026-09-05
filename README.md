@@ -54,7 +54,7 @@ Run the tests:
 ## Usage
 
 1. On startup, the program checks the 6 hardcoded example codes and displays the results of the validation.
-2. Enter or scan an additional code when prompted and pres Enter key to validate the code.
+2. Enter or scan an additional code when prompted and press Enter key to validate the code.
 
    The input numeric string must include the Application Identifier `00`, without spaces or parentheses. For example:
 
@@ -64,4 +64,4 @@ Run the tests:
 
    The expected input is 20 digits: the two-digit Application Identifier followed by the 18-digit SSCC. FNC1 must not be included.
 3. Repeat step 2 as needed.
-3. Type `q` or `Q` and press Enter to exit.
+4. Type `q` or `Q` and press Enter to exit.
