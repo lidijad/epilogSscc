@@ -4,12 +4,14 @@
  * 
  * The application reads a configuration file to obtain the GS1-128 organization ID and validates example
  * codes as well as user-provided / scanned codes against the SSCC format according to the GS1-128 standard.
- * @todo Add unit test.
  */
 #include <iostream>
-#include <limits>
 #include <fstream>
 #include <vector>
+#include <cassert>
+#include <string>
+#include <cctype>
+#include <cstdlib>
 using namespace std;
 
 /**
@@ -23,11 +25,12 @@ struct ValidationResult {
     vector<string> errors;
 };
 
-ValidationResult validateSscc(const string& input);
-void printUsage();
-void loadOrganizationID();
-void validateAndPrintResult(const string& code);
-void validateExamples();
+ValidationResult validateSscc(const string& input, const string& organizationId);
+void printUsage(const string& organizationId);
+string loadOrganizationID();
+void validateAndPrintResult(const string& code, const string& organizationId);
+void validateExamples(const string& organizationId);
+void runUnitTests(const string& organizationId);
 
 /** List of example SSCC codes for validation. */
 const vector<string> examples = {
@@ -39,9 +42,9 @@ const vector<string> examples = {
     "00034260321130774636"
 };
 
-const short CODE_LENGTH = 20; // Maximum length of the code
-const string CONFIGURATION_FILE = "application.properties"; // Configuration file name
-string organizationId; // GS1-128 organization ID
+const short CODE_LENGTH = 20; // expected length of the code
+const string CONFIGURATION_FILE = "application.properties";
+const string ORGANIZATION_KEY = "organizationId=";
 
 // color codes for terminal output
 const string COLOR_RED = "\033[1;31m";
@@ -49,32 +52,41 @@ const string COLOR_GREEN = "\033[1;32m";
 const string COLOR_ORANGE = "\033[1;33m";
 const string COLOR_RESET = "\033[0m";
 
-int main() {
-    loadOrganizationID();
+int main(int argc, char* argv[]) {
+    const string organizationId = loadOrganizationID();
 
-    validateExamples();
+    if (argc == 2 && string(argv[1]) == "--test") {
+        runUnitTests(organizationId);
+        return 0;
+    }
 
-    printUsage();
+    validateExamples(organizationId);
+
+    printUsage(organizationId);
 
     return 0;
 }
 
 /**
  * Validate the example codes and print the validation results.
+ * 
+ * @param organizationId The organization ID to use for validation.
  */
-void validateExamples() {
+void validateExamples(const string& organizationId) {
     cout << "Validating example codes..." << endl << endl;
     for (const string& example : examples) {
         cout << "Validating code: " << COLOR_ORANGE << example << COLOR_RESET << endl;
-        validateAndPrintResult(example);
+        validateAndPrintResult(example, organizationId);
     }
 }
 
 /**
  * Load the organization ID from the configuration file. If the file cannot be opened or the
  * organization ID is not found, an error message is printed and the program exits.
+ * 
+ * @return The loaded organization ID.
  */
-void loadOrganizationID() {
+string loadOrganizationID() {
     ifstream configFile(CONFIGURATION_FILE);
     if (!configFile.is_open()) {
         cerr << "Error: Could not open configuration file: " << CONFIGURATION_FILE << endl;
@@ -82,11 +94,11 @@ void loadOrganizationID() {
     }
 
     string line;
+    string organizationId;
 
     while (getline(configFile, line)) {
-        size_t pos = line.find("organizationId=");
-        if (pos != string::npos) {
-            organizationId = line.substr(pos + 15);
+        if (line.rfind(ORGANIZATION_KEY, 0) == 0) {
+            organizationId = line.substr(ORGANIZATION_KEY.length());
             break;
         }
     }
@@ -95,15 +107,27 @@ void loadOrganizationID() {
         cerr << "Error: Organization ID not found in configuration file." << endl;
         exit(1);
     }
+    
+    // only digits are allowed
+    for (char c : organizationId) {
+        if (!isdigit(static_cast<unsigned char>(c))) {
+            cerr << "Error: Organization ID must contain digits only." << endl;
+            exit(1);
+        }
+    }
+
+    cout << "Loaded organization ID: " << organizationId << endl;
+    return organizationId;
 }
 
 /**
  * Validate a specific SSCC code.
  *
  * @param input The SSCC code to validate.
+ * @param organizationId The organization ID to use for validation.
  * @return The validation result: status and errors.
  */
-ValidationResult validateSscc(const string& input) {
+ValidationResult validateSscc(const string& input, const string& organizationId) {
     ValidationResult result{true, {}};
 
     if (input.empty()) {
@@ -114,7 +138,7 @@ ValidationResult validateSscc(const string& input) {
     // only digits are allowed
     bool nonDigitFound = false;
     for (char c : input) {
-        if (!isdigit(c)) {
+        if (!isdigit(static_cast<unsigned char>(c))) {
             result.valid = false;
             nonDigitFound = true;
             break;
@@ -130,13 +154,13 @@ ValidationResult validateSscc(const string& input) {
         result.errors.push_back("Invalid code length. Expected " + to_string(CODE_LENGTH) + " digits.");
     }
 
-    // company prefix starts at index 3
+    // Application Identifier must be "00" for SSCC
     if (input.length() >= 2 && input.substr(0, 2) != "00") {
         result.valid = false;
         result.errors.push_back("Invalid Application Identifier. Expected '00', got: " + input.substr(0, 2));
     }
 
-    // AI takes first 2 characters, company prefix starts at index 3
+    // company prefix starts at index 3
     if (input.length() >= 3 + organizationId.length()) {
         string enteredOrganizationId = input.substr(3, organizationId.length());
         if (enteredOrganizationId != organizationId) {
@@ -154,10 +178,11 @@ ValidationResult validateSscc(const string& input) {
  * Validate a specific SSCC code and print the validation result.
  * 
  * @param code The SSCC code to validate.
+ * @param organizationId The organization ID to use for validation.
  */
-void validateAndPrintResult(const string& code) {
+void validateAndPrintResult(const string& code, const string& organizationId) {
 
-    ValidationResult result = validateSscc(code);
+    ValidationResult result = validateSscc(code, organizationId);
 
     if (result.valid) {
         cout << "The code is " << COLOR_GREEN << "VALID" << COLOR_RESET << endl << endl;
@@ -172,20 +197,52 @@ void validateAndPrintResult(const string& code) {
 
 /**
  * Print usage instructions.
+ * 
+ * @param organizationId The organization ID to use for validation.
  */
-void printUsage() {
-    // TODO fix Ctrl+D endless loop issue
+void printUsage(const string& organizationId) {
     while (true) {
         cout << "Enter a code to validate or 'q' to quit: ";
 
         string input;
-        cin >> input;
+        if (!(cin >> input)) {
+            cout << endl << "Exiting." << endl;
+            return;
+        }
 
         if (input == "q" || input == "Q") {
             cout << "Exiting." << endl;
             return;
         }
 
-        validateAndPrintResult(input);
+        validateAndPrintResult(input, organizationId);
     }
+}
+
+/**
+ * Run unit tests for the SSCC validator.
+ * 
+ * @param organizationId The organization ID to use for validation.
+ */
+void runUnitTests(const string& organizationId) {
+    // Examples
+    assert(validateSscc(examples[0], organizationId).valid);
+    assert(!validateSscc(examples[1], organizationId).valid);
+   // assert(!validateSscc(examples[2], organizationId).valid); // TODO uncomment when control digit validation is implemented
+    assert(validateSscc(examples[3], organizationId).valid);
+    assert(!validateSscc(examples[4], organizationId).valid);
+    assert(!validateSscc(examples[5], organizationId).valid);
+
+    // Additional invalid inputs.
+    assert(!validateSscc("", organizationId).valid);
+    assert(!validateSscc("0003426031113077659A", organizationId).valid);   // Contains a letter
+    assert(!validateSscc("000342603111307765940", organizationId).valid);  // Too long
+    assert(!validateSscc("0003426031113", organizationId).valid);  // Too short
+
+     // change organization ID - previously valid codes should now be invalid
+    const string anotherOrganizationId = "1234567";
+    assert(!validateSscc(examples[0], anotherOrganizationId).valid);
+    assert(!validateSscc(examples[3], anotherOrganizationId).valid);
+
+    cout << "All tests passed." << endl;
 }
