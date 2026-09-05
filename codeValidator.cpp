@@ -31,9 +31,11 @@ string loadOrganizationID();
 void validateAndPrintResult(const string& code, const string& organizationId);
 void validateExamples(const string& organizationId);
 void runUnitTests(const string& organizationId);
+bool isCheckDigitValid(const string& code);
+int calculateCheckDigit(const string& code);
 
 /** List of example SSCC codes for validation. */
-const vector<string> examples = {
+const vector<string> exampleCodes = {
     "00034260311130776594",
     "02044260311130776512",
     "00034260311130776144",
@@ -42,15 +44,15 @@ const vector<string> examples = {
     "00034260321130774636"
 };
 
-const short CODE_LENGTH = 20; // expected length of the code
+const size_t CODE_LENGTH = 20; // expected length of the code
 const string CONFIGURATION_FILE = "application.properties";
 const string ORGANIZATION_KEY = "organizationId=";
 
-// color codes for terminal output
+// ANSI escape codes for terminal output
 const string COLOR_RED = "\033[1;31m";
 const string COLOR_GREEN = "\033[1;32m";
-const string COLOR_ORANGE = "\033[1;33m";
 const string COLOR_RESET = "\033[0m";
+const string TEXT_BOLD = "\033[1m";
 
 int main(int argc, char* argv[]) {
     const string organizationId = loadOrganizationID();
@@ -74,8 +76,7 @@ int main(int argc, char* argv[]) {
  */
 void validateExamples(const string& organizationId) {
     cout << "Validating example codes..." << endl << endl;
-    for (const string& example : examples) {
-        cout << "Validating code: " << COLOR_ORANGE << example << COLOR_RESET << endl;
+    for (const string& example : exampleCodes) {
         validateAndPrintResult(example, organizationId);
     }
 }
@@ -135,6 +136,13 @@ ValidationResult validateSscc(const string& input, const string& organizationId)
         result.errors.push_back("Code is empty.");
     }
 
+    const size_t inputLength = input.length();
+
+    if (inputLength != CODE_LENGTH) {
+        result.valid = false;
+        result.errors.push_back("Invalid code length. Expected " + to_string(CODE_LENGTH) + " digits.");
+    }
+
     // only digits are allowed
     bool nonDigitFound = false;
     for (char c : input) {
@@ -146,12 +154,6 @@ ValidationResult validateSscc(const string& input, const string& organizationId)
     }
     if (nonDigitFound) {
         result.errors.push_back("Code contains non-digit characters.");
-    }
-
-    // length of the code should be exactly 20 digits
-    if (input.length() != CODE_LENGTH) {
-        result.valid = false;
-        result.errors.push_back("Invalid code length. Expected " + to_string(CODE_LENGTH) + " digits.");
     }
 
     // Application Identifier must be "00" for SSCC
@@ -169,7 +171,12 @@ ValidationResult validateSscc(const string& input, const string& organizationId)
         }
     }
 
-    // TODO validate control digit (last digit)
+    if (inputLength == CODE_LENGTH && !nonDigitFound) { // only check the check digit if the length is correct and all characters are digits
+        if (!isCheckDigitValid(input)) {
+            result.valid = false;
+            result.errors.push_back("Invalid check digit.");
+        }
+    }
 
     return result;
 }
@@ -181,15 +188,15 @@ ValidationResult validateSscc(const string& input, const string& organizationId)
  * @param organizationId The organization ID to use for validation.
  */
 void validateAndPrintResult(const string& code, const string& organizationId) {
-
     ValidationResult result = validateSscc(code, organizationId);
 
+    string output = "Validating code: " + TEXT_BOLD + code + COLOR_RESET + " - ";
     if (result.valid) {
-        cout << "The code is " << COLOR_GREEN << "VALID" << COLOR_RESET << endl << endl;
+        cout << output << COLOR_GREEN << "VALID" << COLOR_RESET << endl << endl;
     } else {
-        cout << "The code is INVALID" << endl;
+        cout << output << COLOR_RED << "INVALID" << COLOR_RESET << endl;
         for (const string& error : result.errors) {
-            cout << COLOR_RED << error << COLOR_RESET << endl;
+            cout << error << endl;
         }
         cout << endl;
     }
@@ -219,6 +226,34 @@ void printUsage(const string& organizationId) {
     }
 }
 
+bool isCheckDigitValid(const string& code) {
+    if (code.length() != CODE_LENGTH) {
+        return false;
+    }
+    const string codeWithoutCheckDigit = code.substr(2, CODE_LENGTH - 3);
+
+    int expectedCheckDigit = calculateCheckDigit(codeWithoutCheckDigit);
+    int actualCheckDigit = code.back() - '0'; // Convert char to int
+
+    return expectedCheckDigit == actualCheckDigit;
+}
+
+/**
+ * Calculate the check digit for a given SSCC code.
+ * 
+ * @param code The SSCC code for which to calculate the check digit.
+ * @return The calculated check digit using the Modulo 10 algorithm.
+ */
+int calculateCheckDigit(const string& code) {
+    int sum = 0;
+    for (size_t i = 0; i < code.length(); ++i) {
+        const int digit = code[i] - '0'; // Convert char to int
+        const int weight = (i % 2 == 0) ? 3 : 1; // Weighting factor: 3 for even positions, 1 for odd positions
+        sum += digit * weight;
+    }
+    return (10 - (sum % 10)) % 10;
+}
+
 /**
  * Run unit tests for the SSCC validator.
  * 
@@ -226,12 +261,12 @@ void printUsage(const string& organizationId) {
  */
 void runUnitTests(const string& organizationId) {
     // Examples
-    assert(validateSscc(examples[0], organizationId).valid);
-    assert(!validateSscc(examples[1], organizationId).valid);
-   // assert(!validateSscc(examples[2], organizationId).valid); // TODO uncomment when control digit validation is implemented
-    assert(validateSscc(examples[3], organizationId).valid);
-    assert(!validateSscc(examples[4], organizationId).valid);
-    assert(!validateSscc(examples[5], organizationId).valid);
+    assert(validateSscc(exampleCodes[0], organizationId).valid);
+    assert(!validateSscc(exampleCodes[1], organizationId).valid);
+    assert(!validateSscc(exampleCodes[2], organizationId).valid);
+    assert(validateSscc(exampleCodes[3], organizationId).valid);
+    assert(!validateSscc(exampleCodes[4], organizationId).valid);
+    assert(!validateSscc(exampleCodes[5], organizationId).valid);
 
     // Additional invalid inputs.
     assert(!validateSscc("", organizationId).valid);
@@ -241,8 +276,8 @@ void runUnitTests(const string& organizationId) {
 
      // change organization ID - previously valid codes should now be invalid
     const string anotherOrganizationId = "1234567";
-    assert(!validateSscc(examples[0], anotherOrganizationId).valid);
-    assert(!validateSscc(examples[3], anotherOrganizationId).valid);
+    assert(!validateSscc(exampleCodes[0], anotherOrganizationId).valid);
+    assert(!validateSscc(exampleCodes[3], anotherOrganizationId).valid);
 
     cout << "All tests passed." << endl;
 }

@@ -16,7 +16,7 @@ The program validates 6 example codes and supports interactive input of codes. I
 ```properties
 organizationId=34260311
 ```
-If the configuration file cannot be opened or the ID is missing or empty, the proram prints an error and exits.
+If the configuration file cannot be opened or the ID is missing or empty, the program prints an error and exits.
 
 ## Build and run
 
@@ -62,12 +62,6 @@ Run the tests:
    00034260311130776594
    ```
 
-   The expected input is 20 digits: the two-digit Application Identifier followed by the 18-digit SSCC. FNC1 should not be included.
+   The expected input is 20 digits: the two-digit Application Identifier followed by the 18-digit SSCC. FNC1 must not be included.
 3. Repeat step 2 as needed.
 3. Type `q` or `Q` and press Enter to exit.
-
-## TODO
-
-- Add GS1 check digit validation.
-- Add automated unit tests.
-- Handle end-of-input in interactive mode.
