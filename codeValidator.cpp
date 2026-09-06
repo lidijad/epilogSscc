@@ -11,7 +11,6 @@
 #include <optional>
 #include <vector>
 #include <string>
-#include <cassert>
 using namespace std;
 
 /**
@@ -270,31 +269,50 @@ int calculateCheckDigit(const string& code) {
     return (10 - (sum % 10)) % 10;
 }
 
+int expect(bool condition, string description) {
+    if (!condition) {
+        cerr << "FAILED: " << description << endl;
+        return 1;
+    }
+    return 0;
+}
+
 /**
- * Run unit tests for the SSCC validator.
+ * Run unit tests for the SSCC validator. Using own testing logic since assert fails when first test fails, and we want to run all tests and report all failures.
  *
- * @return 0 if all assertions pass.
+ * @return The process exit code: 0 if all tests passed, 1 otherwise.
  */
 int runUnitTests() {
     const string organizationId = "34260311";
 
-    assert(validateSscc(exampleCodes[0], organizationId).valid);
-    assert(!validateSscc(exampleCodes[1], organizationId).valid);   // multiple errors
-    assert(!validateSscc(exampleCodes[2], organizationId).valid);   // bad check digit
-    assert(validateSscc(exampleCodes[3], organizationId).valid);
-    assert(!validateSscc(exampleCodes[4], organizationId).valid);   // too short
-    assert(!validateSscc(exampleCodes[5], organizationId).valid);   // wrong company prefix
+    int failedTestCount = 0;
 
-    assert(!validateSscc("", organizationId).valid);                      // empty
-    assert(!validateSscc("0003426031113077659A", organizationId).valid);  // contains a letter
-    assert(!validateSscc("000342603111307765940", organizationId).valid); // too long
-    assert(!validateSscc("0003426031113", organizationId).valid);         // too short
+    failedTestCount += expect(validateSscc(exampleCodes[0], organizationId).valid, exampleCodes[0] + " should be valid");
+    failedTestCount += expect(!validateSscc(exampleCodes[1], organizationId).valid, exampleCodes[1] + " should be invalid (multiple errors)");
+    failedTestCount += expect(!validateSscc(exampleCodes[2], organizationId).valid, exampleCodes[2] + " should be invalid (bad check digit)");
+    failedTestCount += expect(validateSscc(exampleCodes[3], organizationId).valid, exampleCodes[3] + " should be valid");
+    failedTestCount += expect(!validateSscc(exampleCodes[4], organizationId).valid, exampleCodes[4] + " should be invalid (too short)");
+    failedTestCount += expect(!validateSscc(exampleCodes[5], organizationId).valid, exampleCodes[5] + " should be invalid (wrong company prefix)");
+
+    failedTestCount += expect(!validateSscc("", organizationId).valid, "empty code should be invalid");
+    string code = "0003426031113077659A";
+    failedTestCount += expect(!validateSscc(code, organizationId).valid, code + " should be invalid (non-digit character)");
+
+    code = "000342603111307765940";
+    failedTestCount += expect(!validateSscc(code, organizationId).valid, code + " should be invalid (too long)");
+
+    code = "0003426031113";
+    failedTestCount += expect(!validateSscc(code, organizationId).valid, code + " should be invalid (too short)");
 
     // change organization ID - previously valid codes should now be invalid
     const string anotherOrganizationId = "1234567";
-    assert(!validateSscc(exampleCodes[0], anotherOrganizationId).valid);
-    assert(!validateSscc(exampleCodes[3], anotherOrganizationId).valid);
+    failedTestCount += expect(!validateSscc(exampleCodes[0], anotherOrganizationId).valid, exampleCodes[0] + " should be invalid for a different organization ID");
+    failedTestCount += expect(!validateSscc(exampleCodes[3], anotherOrganizationId).valid, exampleCodes[3] + " should be invalid for a different organization ID");
 
-    cout << "All tests passed." << endl;
-    return 0;
+    if (failedTestCount == 0) {
+        cout << "All tests passed." << endl;
+        return 0;
+    }
+    cout << failedTestCount << " test(s) failed." << endl;
+    return 1;
 }
